@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/wailsapp/go-webview2/internal/w32"
-	"github.com/wailsapp/go-webview2/webviewloader"
+	"github.com/Humphryyy/go-webview2/internal/w32"
+	"github.com/Humphryyy/go-webview2/webviewloader"
 	"golang.org/x/sys/windows"
 )
 
@@ -720,7 +720,7 @@ func (e *Chromium) GetCookieManager() (*ICoreWebView2CookieManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cookie manager: %w", err)
 	}
-	
+
 	// Note: The caller is responsible for calling Release() on the returned cookieManager
 	return cookieManager, nil
 }

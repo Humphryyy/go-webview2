@@ -1,4 +1,4 @@
-module github.com/wailsapp/go-webview2
+module github.com/Humphryyy/go-webview2
 
 go 1.20
 
