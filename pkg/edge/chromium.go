@@ -259,6 +259,58 @@ func (e *Chromium) Eval(script string) {
 	}
 }
 
+type ExecuteScriptWithResultCompletedHandler struct {
+	resultFunc func(errorCode uintptr, result *ICoreWebView2ExecuteScriptResult) uintptr
+}
+
+func (e *ExecuteScriptWithResultCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
+	return 0
+}
+
+func (e *ExecuteScriptWithResultCompletedHandler) AddRef() uintptr {
+	return 1
+}
+
+func (e *ExecuteScriptWithResultCompletedHandler) Release() uintptr {
+	return 1
+}
+
+func (e *ExecuteScriptWithResultCompletedHandler) ExecuteScriptWithResultCompleted(errorCode uintptr, result *ICoreWebView2ExecuteScriptResult) uintptr {
+	return e.resultFunc(errorCode, result)
+}
+
+func (e *Chromium) EvalWithResult(script string, resultFunc func(errorCode uintptr, result *ICoreWebView2ExecuteScriptResult) uintptr) error {
+	if e.webview == nil {
+		return errors.New("webview not initialized")
+	}
+
+	// Check WebView2 version
+	if e.webview2RuntimeVersion == "" {
+		return errors.New("WebView2 runtime version not available")
+	}
+
+	handlerImpl := &ExecuteScriptWithResultCompletedHandler{}
+
+	handlerImpl.resultFunc = resultFunc
+
+	handler := NewICoreWebView2ExecuteScriptWithResultCompletedHandler(handlerImpl)
+
+	// Get ICoreWebView2_21 interface
+	webview2 := e.webview.GetICoreWebView2_21()
+	if webview2 == nil {
+		return errors.New("failed to get ICoreWebView2_21 interface from webview")
+	}
+
+	defer webview2.Release()
+
+	err := webview2.ExecuteScriptWithResult(script, handler)
+	if err != nil {
+		return fmt.Errorf("error executing script with result: %w", err)
+	}
+
+	return nil
+}
+
 func (e *Chromium) Show() error {
 	return e.controller.PutIsVisible(true)
 }
@@ -722,4 +774,31 @@ func (e *Chromium) GetCookieManager() (*ICoreWebView2CookieManager, error) {
 
 	// Note: The caller is responsible for calling Release() on the returned cookieManager
 	return cookieManager, nil
+}
+
+func (e *Chromium) AddWebResourceRequestedFilterWithRequestSourceKinds(uri string, ResourceContext COREWEBVIEW2_WEB_RESOURCE_CONTEXT, requestSourceKinds COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS) error {
+	if e.webview == nil {
+		return errors.New("webview not initialized")
+	}
+
+	// Check WebView2 version
+	if e.webview2RuntimeVersion == "" {
+		return errors.New("WebView2 runtime version not available")
+	}
+
+	// Get ICoreWebView2_22 interface
+	webview2 := e.webview.GetICoreWebView2_22()
+	if webview2 == nil {
+		return errors.New("failed to get ICoreWebView2_22 interface from webview")
+	}
+
+	defer webview2.Release()
+
+	// Add web resource requested filter
+	err := webview2.AddWebResourceRequestedFilterWithRequestSourceKinds(uri, ResourceContext, requestSourceKinds)
+	if err != nil {
+		return fmt.Errorf("failed to add web resource requested filter: %w", err)
+	}
+
+	return nil
 }
