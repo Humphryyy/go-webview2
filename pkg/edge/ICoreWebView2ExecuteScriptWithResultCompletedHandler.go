@@ -48,7 +48,7 @@ var ICoreWebView2ExecuteScriptWithResultCompletedHandlerFn = ICoreWebView2Execut
 		NewComProc(ICoreWebView2ExecuteScriptWithResultCompletedHandlerIUnknownAddRef),
 		NewComProc(ICoreWebView2ExecuteScriptWithResultCompletedHandlerIUnknownRelease),
 	},
-	NewComProc(ICoreWebView2ExecuteScriptWithResultCompletedHandlerInvoke),
+	NewComProc(ICoreWebView2ExecuteScriptWithResultCompletedHandlerInvoke, "ICoreWebView2ExecuteScriptWithResultCompletedHandlerInvoke"),
 }
 
 func NewICoreWebView2ExecuteScriptWithResultCompletedHandler(impl ICoreWebView2ExecuteScriptWithResultCompletedHandlerImpl) *ICoreWebView2ExecuteScriptWithResultCompletedHandler {

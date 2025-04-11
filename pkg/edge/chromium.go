@@ -238,6 +238,80 @@ func (e *Chromium) Init(script string) {
 	}
 }
 
+type CallDevToolsProtocolMethodCompletedHandler struct {
+	resultFunc func(errorCode uintptr, result string) uintptr
+}
+
+func (c *CallDevToolsProtocolMethodCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
+	return 0
+}
+
+func (c *CallDevToolsProtocolMethodCompletedHandler) AddRef() uintptr {
+	return 1
+}
+
+func (c *CallDevToolsProtocolMethodCompletedHandler) Release() uintptr {
+	return 1
+}
+
+func (c *CallDevToolsProtocolMethodCompletedHandler) CallDevToolsProtocolMethodCompleted(errorCode uintptr, result string) uintptr {
+	return c.resultFunc(errorCode, result)
+}
+
+func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, callback func(errorCode uintptr, result string) uintptr) error {
+	if e.webview == nil {
+		return errors.New("webview not initialized")
+	}
+
+	// Check WebView2 version
+	if e.webview2RuntimeVersion == "" {
+		return errors.New("WebView2 runtime version not available")
+	}
+
+	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{}
+	handlerImpl.resultFunc = callback
+
+	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+
+	err := e.webview.CallDevToolsProtocolMethod(method, params, handler)
+	if err != nil {
+		return fmt.Errorf("error calling dev tools protocol method: %w", err)
+	}
+
+	return nil
+}
+
+func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method string, params string, callback func(errorCode uintptr, result string) uintptr) error {
+	if e.webview == nil {
+		return errors.New("webview not initialized")
+	}
+
+	// Check WebView2 version
+	if e.webview2RuntimeVersion == "" {
+		return errors.New("WebView2 runtime version not available")
+	}
+
+	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{}
+	handlerImpl.resultFunc = callback
+
+	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+
+	// Get ICoreWebView2_11 interface
+	webview2 := e.webview.GetICoreWebView2_11()
+	if webview2 == nil {
+		return errors.New("failed to get ICoreWebView2_11 interface from webview")
+	}
+
+	defer webview2.Release()
+
+	err := webview2.CallDevToolsProtocolMethodForSession(sessionId, method, params, handler)
+	if err != nil {
+		return fmt.Errorf("error calling dev tools protocol method for session: %w", err)
+	}
+
+	return nil
+}
+
 func (e *Chromium) Eval(script string) {
 
 	if e.webview == nil {
@@ -335,6 +409,12 @@ func (e *Chromium) EnvironmentCompleted(res uintptr, env *ICoreWebView2Environme
 	if int32(res) < 0 {
 		e.errorCallback(fmt.Errorf("error creating environmentwith %08x: %s", res, syscall.Errno(res)))
 	}
+
+	if env == nil {
+		e.errorCallback(errors.New("environment is nil"))
+		return 0
+	}
+
 	_, _, err := env.vtbl.AddRef.Call(uintptr(unsafe.Pointer(env)))
 	if err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
 		e.errorCallback(err)
@@ -356,6 +436,17 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	if int32(res) < 0 {
 		e.errorCallback(fmt.Errorf("error creating controller with %08x: %s", res, syscall.Errno(res)))
 	}
+
+	if controller == nil {
+		e.errorCallback(errors.New("controller is nil"))
+		return 0
+	}
+
+	if controller.vtbl == nil {
+		e.errorCallback(errors.New("controller vtbl is nil"))
+		return 0
+	}
+
 	_, _, err := controller.vtbl.AddRef.Call(uintptr(unsafe.Pointer(controller)))
 	if err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
 		e.errorCallback(err)

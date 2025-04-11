@@ -52,8 +52,12 @@ const (
 type ComProc uintptr
 
 // NewComProc creates a new COM proc from a Go function.
-func NewComProc(fn interface{}) ComProc {
-	return ComProc(windows.NewCallback(fn))
+func NewComProc(fn interface{}, log ...string) ComProc {
+	cb := windows.NewCallback(fn)
+	if len(log) > 0 {
+		fmt.Println("Creating COM proc:", log[0], cb)
+	}
+	return ComProc(cb)
 }
 
 // Call calls a COM procedure.
@@ -218,6 +222,31 @@ func (i *ICoreWebView2) GetContainsFullScreenElement() (bool, error) {
 		return false, err
 	}
 	return result, nil
+}
+
+func (i *ICoreWebView2) CallDevToolsProtocolMethod(methodName string, parametersAsJson string, handler *ICoreWebView2CallDevToolsProtocolMethodCompletedHandler) error {
+
+	// Convert string 'methodName' to *uint16
+	_methodName, err := UTF16PtrFromString(methodName)
+	if err != nil {
+		return err
+	}
+	// Convert string 'parametersAsJson' to *uint16
+	_parametersAsJson, err := UTF16PtrFromString(parametersAsJson)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = i.vtbl.CallDevToolsProtocolMethod.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(_methodName)),
+		uintptr(unsafe.Pointer(_parametersAsJson)),
+		uintptr(unsafe.Pointer(handler)),
+	)
+	if err != windows.ERROR_SUCCESS {
+		return err
+	}
+	return nil
 }
 
 func (i *ICoreWebView2) QueryInterface2() (*ICoreWebView2_2, error) {
