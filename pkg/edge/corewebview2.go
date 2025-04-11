@@ -54,9 +54,6 @@ type ComProc uintptr
 // NewComProc creates a new COM proc from a Go function.
 func NewComProc(fn interface{}, log ...string) ComProc {
 	cb := windows.NewCallback(fn)
-	if len(log) > 0 {
-		fmt.Println("Creating COM proc:", log[0], cb)
-	}
 	return ComProc(cb)
 }
 
