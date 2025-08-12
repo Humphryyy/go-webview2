@@ -161,7 +161,7 @@ const (
 	BrowserVersionString = Capability("85.0.564.70") // Browser version info
 )
 
-func hasCapability(webview2RuntimeVersion string, capability Capability) bool {
+func HasCapability(webview2RuntimeVersion string, capability Capability) bool {
 	result, err := webviewloader.CompareBrowserVersions(webview2RuntimeVersion, string(capability))
 	if err != nil {
 		return false

@@ -15,14 +15,15 @@ func (e *Chromium) SetSize(bounds w32.Rect) {
 		return
 	}
 
-	_, _, err := e.controller.vtbl.PutBounds.Call(
+	hr, _, _ := e.controller.vtbl.PutBounds.Call(
 		uintptr(unsafe.Pointer(e.controller)),
 		uintptr(bounds.Left),
 		uintptr(bounds.Top),
 		uintptr(bounds.Right),
 		uintptr(bounds.Bottom),
 	)
-	if err != windows.ERROR_SUCCESS {
-		e.errorCallback(err)
+
+	if windows.Handle(hr) != windows.S_OK {
+		e.errorCallback(windows.Errno(hr))
 	}
 }

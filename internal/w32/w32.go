@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	ole32              = windows.NewLazySystemDLL("ole32")
-	Ole32OleInitialize = ole32.NewProc("OleInitialize")
+	ole32               = windows.NewLazySystemDLL("ole32")
+	Ole32CoInitializeEx = ole32.NewProc("CoInitializeEx")
 
 	kernel32                   = windows.NewLazySystemDLL("kernel32")
 	Kernel32GetCurrentThreadID = kernel32.NewProc("GetCurrentThreadId")
@@ -46,6 +46,13 @@ var (
 const (
 	SystemMetricsCxIcon = 11
 	SystemMetricsCyIcon = 12
+)
+
+const (
+	COINIT_APARTMENTTHREADED = 0x2
+	COINIT_MULTITHREADED     = 0x0
+	COINIT_DISABLE_OLE1DDE   = 0x4
+	COINIT_SPEED_OVER_MEMORY = 0x8
 )
 
 const (
@@ -157,6 +164,19 @@ func SHCreateMemStream(data []byte) (uintptr, error) {
 }
 
 const CW_USEDEFAULT = 0x80000000
+
+// GetClientRect retrieves the coordinates of a window's client area. The client coordinates specify the upper-left and lower-right corners of the
+// client area. Because client coordinates are relative to the upper-left corner of a window's client area, the coordinates of the upper-left
+// corner are (0,0).
+func GetClientRect(hwnd uintptr) (Rect, error) {
+	var rect Rect
+	ret, _, err := User32GetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
+	if ret == 0 {
+		return Rect{}, err
+	}
+
+	return rect, nil
+}
 
 // DefWindowProc calls the default window procedure to provide default processing for any window messages that an application does not process.
 func DefWindowProc(hwnd, msg, wparam, lparam uintptr) uintptr {
