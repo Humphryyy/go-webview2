@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -293,6 +294,10 @@ func (c *CallDevToolsProtocolMethodCompletedHandler) CallDevToolsProtocolMethodC
 	return c.resultFunc(errorCode, result)
 }
 
+// Keep a pool of handlers to prevent garbage collection
+var cdpHandlerPool = make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, 0, 100)
+var cdpHandlerPoolMutex sync.Mutex
+
 func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, callback func(errorCode uintptr, result string) uintptr) error {
 	if e.webview == nil {
 		return errors.New("webview not initialized")
@@ -307,6 +312,15 @@ func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, call
 	handlerImpl.resultFunc = callback
 
 	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+
+	// Keep a reference to prevent garbage collection
+	cdpHandlerPoolMutex.Lock()
+	cdpHandlerPool = append(cdpHandlerPool, handler)
+	// Limit pool size to prevent memory leak
+	if len(cdpHandlerPool) > 100 {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-100:]
+	}
+	cdpHandlerPoolMutex.Unlock()
 
 	err := e.webview.CallDevToolsProtocolMethod(method, params, handler)
 	if err != nil {
@@ -330,6 +344,15 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 	handlerImpl.resultFunc = callback
 
 	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+
+	// Keep a reference to prevent garbage collection
+	cdpHandlerPoolMutex.Lock()
+	cdpHandlerPool = append(cdpHandlerPool, handler)
+	// Limit pool size to prevent memory leak
+	if len(cdpHandlerPool) > 100 {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-100:]
+	}
+	cdpHandlerPoolMutex.Unlock()
 
 	// Get ICoreWebView2_11 interface
 	webview2 := e.webview.GetICoreWebView2_11()
