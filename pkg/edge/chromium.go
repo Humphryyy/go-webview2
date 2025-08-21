@@ -295,7 +295,7 @@ func (c *CallDevToolsProtocolMethodCompletedHandler) CallDevToolsProtocolMethodC
 }
 
 // Keep a pool of handlers to prevent garbage collection
-var cdpHandlerPool = make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, 0, 100)
+var cdpHandlerPool = make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, 0, 10000)
 var cdpHandlerPoolMutex sync.Mutex
 
 func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, callback func(errorCode uintptr, result string) uintptr) error {
@@ -317,8 +317,8 @@ func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, call
 	cdpHandlerPoolMutex.Lock()
 	cdpHandlerPool = append(cdpHandlerPool, handler)
 	// Limit pool size to prevent memory leak
-	if len(cdpHandlerPool) > 100 {
-		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-100:]
+	if len(cdpHandlerPool) > 10000 {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-10000:]
 	}
 	cdpHandlerPoolMutex.Unlock()
 
@@ -349,8 +349,8 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 	cdpHandlerPoolMutex.Lock()
 	cdpHandlerPool = append(cdpHandlerPool, handler)
 	// Limit pool size to prevent memory leak
-	if len(cdpHandlerPool) > 100 {
-		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-100:]
+	if len(cdpHandlerPool) > 10000 {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-10000:]
 	}
 	cdpHandlerPoolMutex.Unlock()
 
@@ -370,15 +370,57 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 	return nil
 }
 
-func (e *Chromium) Eval(script string) {
+type ExecuteScriptCompletedHandler struct {
+	resultFunc func(errorCode uintptr, executedScript string) uintptr
+}
+
+func (e *ExecuteScriptCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
+	return 0
+}
+
+func (e *ExecuteScriptCompletedHandler) AddRef() uintptr {
+	return 1
+}
+
+func (e *ExecuteScriptCompletedHandler) Release() uintptr {
+	return 1
+}
+
+func (e *ExecuteScriptCompletedHandler) ExecuteScriptCompleted(errorCode uintptr, executedScript string) uintptr {
+	return e.resultFunc(errorCode, executedScript)
+}
+
+var executeScriptHandlerPool = make([]*ICoreWebView2ExecuteScriptCompletedHandler, 0, 10000)
+var executeScriptHandlerPoolMutex sync.Mutex
+
+func (e *Chromium) Eval(script string, resultFunc ...func(errorCode uintptr, executedScript string) uintptr) error {
 	if e.webview == nil || e.shuttingDown {
-		return
+		return errors.New("webview not initialized or shutting down")
 	}
 
-	err := e.webview.ExecuteScript(script, nil)
-	if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
-		e.errorCallback(err)
+	var handler *ICoreWebView2ExecuteScriptCompletedHandler
+
+	if len(resultFunc) > 0 {
+		handlerImpl := &ExecuteScriptCompletedHandler{}
+		handlerImpl.resultFunc = resultFunc[0]
+
+		handler = NewICoreWebView2ExecuteScriptCompletedHandler(handlerImpl)
+
+		executeScriptHandlerPoolMutex.Lock()
+		executeScriptHandlerPool = append(executeScriptHandlerPool, handler)
+		// Limit pool size to prevent memory leak
+		if len(executeScriptHandlerPool) > 10000 {
+			executeScriptHandlerPool = executeScriptHandlerPool[len(executeScriptHandlerPool)-10000:]
+		}
+		executeScriptHandlerPoolMutex.Unlock()
 	}
+
+	err := e.webview.ExecuteScript(script, handler)
+	if err != nil {
+		return fmt.Errorf("error executing script: %w", err)
+	}
+
+	return nil
 }
 
 type ExecuteScriptWithResultCompletedHandler struct {

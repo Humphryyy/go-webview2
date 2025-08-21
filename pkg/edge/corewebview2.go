@@ -293,8 +293,8 @@ func (i *ICoreWebView2) AddScriptToExecuteOnDocumentCreated(javaScript string, h
 	return nil
 }
 
-func (i *ICoreWebView2) ExecuteScript(javascript string, handler *iCoreWebView2ExecuteScriptCompletedHandler) error {
-	u16js, err := windows.UTF16PtrFromString(javascript)
+func (i *ICoreWebView2) ExecuteScript(javascript string, handler *ICoreWebView2ExecuteScriptCompletedHandler) error {
+	u16js, err := UTF16PtrFromString(javascript)
 	if err != nil {
 		return err
 	}
