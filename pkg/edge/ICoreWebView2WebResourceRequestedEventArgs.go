@@ -36,7 +36,6 @@ func (i *ICoreWebView2WebResourceRequestedEventArgs) Release() uint32 {
 }
 
 func (i *ICoreWebView2WebResourceRequestedEventArgs) PutResponse(response *ICoreWebView2WebResourceResponse) error {
-	
 
 	hr, _, _ := i.vtbl.PutResponse.Call(
 		uintptr(unsafe.Pointer(i)),
@@ -49,7 +48,7 @@ func (i *ICoreWebView2WebResourceRequestedEventArgs) PutResponse(response *ICore
 }
 
 func (i *ICoreWebView2WebResourceRequestedEventArgs) GetRequest() (*ICoreWebView2WebResourceRequest, error) {
-	
+
 	var request *ICoreWebView2WebResourceRequest
 	hr, _, _ := i.vtbl.GetRequest.Call(
 		uintptr(unsafe.Pointer(i)),
@@ -59,6 +58,19 @@ func (i *ICoreWebView2WebResourceRequestedEventArgs) GetRequest() (*ICoreWebView
 		return nil, windows.Errno(hr)
 	}
 	return request, nil
+}
+
+func (i *ICoreWebView2WebResourceRequestedEventArgs) GetResponse() (*ICoreWebView2WebResourceResponse, error) {
+
+	var response *ICoreWebView2WebResourceResponse
+	hr, _, _ := i.vtbl.GetResponse.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(&response)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return nil, windows.Errno(hr)
+	}
+	return response, nil
 }
 
 func (i *ICoreWebView2WebResourceRequestedEventArgs) GetDeferral() (*ICoreWebView2Deferral, error) {

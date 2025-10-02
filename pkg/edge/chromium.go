@@ -65,6 +65,7 @@ type Chromium struct {
 	containsFullScreenElementChanged *ICoreWebView2ContainsFullScreenElementChangedEventHandler
 	permissionRequested              *iCoreWebView2PermissionRequestedEventHandler
 	webResourceRequested             *iCoreWebView2WebResourceRequestedEventHandler
+	webResourceResponseReceived      *iCoreWebView2WebResourceResponseReceivedEventHandler
 	acceleratorKeyPressed            *ICoreWebView2AcceleratorKeyPressedEventHandler
 	navigationCompleted              *ICoreWebView2NavigationCompletedEventHandler
 	processFailed                    *ICoreWebView2ProcessFailedEventHandler
@@ -86,6 +87,7 @@ type Chromium struct {
 	MessageCallback                          func(message string, sender *ICoreWebView2, args *ICoreWebView2WebMessageReceivedEventArgs)
 	MessageWithAdditionalObjectsCallback     func(message string, sender *ICoreWebView2, args *ICoreWebView2WebMessageReceivedEventArgs)
 	WebResourceRequestedCallback             func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
+	WebResourceResponseReceivedCallback      func(response *ICoreWebView2WebResourceResponseView, args *ICoreWebView2WebResourceResponseReceivedEventArgs)
 	NavigationCompletedCallback              func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
 	ProcessFailedCallback                    func(sender *ICoreWebView2, args *ICoreWebView2ProcessFailedEventArgs)
 	ContainsFullScreenElementChangedCallback func(sender *ICoreWebView2, args *ICoreWebView2ContainsFullScreenElementChangedEventArgs)
@@ -119,6 +121,7 @@ func NewChromium() *Chromium {
 	e.webMessageReceived = newICoreWebView2WebMessageReceivedEventHandler(e)
 	e.permissionRequested = newICoreWebView2PermissionRequestedEventHandler(e)
 	e.webResourceRequested = newICoreWebView2WebResourceRequestedEventHandler(e)
+	e.webResourceResponseReceived = newICoreWebView2WebResourceResponseReceivedEventHandler(e)
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
 	e.processFailed = newICoreWebView2ProcessFailedEventHandler(e)
@@ -558,6 +561,10 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 	if err != nil {
 		e.errorCallback(err)
 	}
+	err = e.webview.AddWebResourceResponseReceived(e.webResourceResponseReceived, &token)
+	if err != nil {
+		e.errorCallback(err)
+	}
 	err = e.webview.AddNavigationCompleted(e.navigationCompleted, &token)
 	if err != nil {
 		e.errorCallback(err)
@@ -679,6 +686,20 @@ func (e *Chromium) WebResourceRequested(sender *ICoreWebView2, args *ICoreWebVie
 	if e.WebResourceRequestedCallback != nil {
 		e.WebResourceRequestedCallback(req, args)
 	}
+	return 0
+}
+
+func (e *Chromium) WebResourceResponseReceived(sender *ICoreWebView2, args *ICoreWebView2WebResourceResponseReceivedEventArgs) uintptr {
+	resp, err := args.GetResponse()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Release()
+
+	if e.WebResourceResponseReceivedCallback != nil {
+		e.WebResourceResponseReceivedCallback(resp, args)
+	}
+
 	return 0
 }
 

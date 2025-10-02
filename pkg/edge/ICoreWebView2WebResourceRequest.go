@@ -52,7 +52,7 @@ func (i *ICoreWebView2WebResourceRequest) GetMethod() (string, error) {
 }
 
 func (i *ICoreWebView2WebResourceRequest) GetUri() (string, error) {
-	
+
 	// Create *uint16 to hold result
 	var _uri *uint16
 	hr, _, _ := i.vtbl.GetUri.Call(
@@ -79,6 +79,17 @@ func (i *ICoreWebView2WebResourceRequest) GetContent() (*IStream, error) {
 		return nil, windows.Errno(hr)
 	}
 	return stream, nil
+}
+
+func (i *ICoreWebView2WebResourceRequest) PutContent(stream *IStream) error {
+	hr, _, _ := i.vtbl.PutContent.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(stream)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return windows.Errno(hr)
+	}
+	return nil
 }
 
 // GetHeaders returns the mutable HTTP request headers. Make sure to call

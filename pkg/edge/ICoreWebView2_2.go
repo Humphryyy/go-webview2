@@ -3,6 +3,7 @@
 package edge
 
 import (
+	"fmt"
 	"syscall"
 	"unsafe"
 
@@ -110,4 +111,40 @@ func (i *ICoreWebView2_2) GetCookieManager() (*ICoreWebView2CookieManager, error
 		return nil, syscall.Errno(hr)
 	}
 	return cookieManager, nil
+}
+
+func (i *ICoreWebView2) GetICoreWebView2_2() *ICoreWebView2_2 {
+	var result *ICoreWebView2_2
+
+	iidICoreWebView2_2 := NewGUID("{9E8F0CF8-E670-4B5E-B2BC-73E061E3184C}")
+	hr, _, _ := i.vtbl.QueryInterface.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(iidICoreWebView2_2)),
+		uintptr(unsafe.Pointer(&result)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return nil
+	}
+	return result
+}
+
+func (e *Chromium) GetICoreWebView2_2() *ICoreWebView2_2 {
+	return e.webview.GetICoreWebView2_2()
+}
+
+func (i *ICoreWebView2) AddWebResourceResponseReceived(handler *iCoreWebView2WebResourceResponseReceivedEventHandler, token *_EventRegistrationToken) error {
+	webview2 := i.GetICoreWebView2_2()
+	if webview2 == nil {
+		return fmt.Errorf("ICoreWebView2_2 interface not available")
+	}
+
+	hr, _, _ := webview2.vtbl.AddWebResourceResponseReceived.Call(
+		uintptr(unsafe.Pointer(webview2)),
+		uintptr(unsafe.Pointer(handler)),
+		uintptr(unsafe.Pointer(token)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return windows.Errno(hr)
+	}
+	return nil
 }
