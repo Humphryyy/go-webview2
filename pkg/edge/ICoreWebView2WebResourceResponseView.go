@@ -110,8 +110,12 @@ func (i *ICoreWebView2WebResourceResponseView) GetContent(callback func(errorCod
 
 	contentHandlerPoolMutex.Lock()
 	contentHandlerPool = append(contentHandlerPool, handler)
+
 	if len(contentHandlerPool) > 10000 {
-		contentHandlerPool = contentHandlerPool[len(contentHandlerPool)-10000:]
+		half := len(contentHandlerPool) / 2
+		tmp := make([]*ICoreWebView2WebResourceResponseViewGetContentCompletedHandler, len(contentHandlerPool)-half)
+		copy(tmp, contentHandlerPool[half:])
+		contentHandlerPool = tmp
 	}
 
 	contentHandlerPoolMutex.Unlock()

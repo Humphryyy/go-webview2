@@ -65,7 +65,6 @@ type Chromium struct {
 	containsFullScreenElementChanged *ICoreWebView2ContainsFullScreenElementChangedEventHandler
 	permissionRequested              *iCoreWebView2PermissionRequestedEventHandler
 	webResourceRequested             *iCoreWebView2WebResourceRequestedEventHandler
-	webResourceResponseReceived      *iCoreWebView2WebResourceResponseReceivedEventHandler
 	acceleratorKeyPressed            *ICoreWebView2AcceleratorKeyPressedEventHandler
 	navigationCompleted              *ICoreWebView2NavigationCompletedEventHandler
 	processFailed                    *ICoreWebView2ProcessFailedEventHandler
@@ -121,7 +120,6 @@ func NewChromium() *Chromium {
 	e.webMessageReceived = newICoreWebView2WebMessageReceivedEventHandler(e)
 	e.permissionRequested = newICoreWebView2PermissionRequestedEventHandler(e)
 	e.webResourceRequested = newICoreWebView2WebResourceRequestedEventHandler(e)
-	e.webResourceResponseReceived = newICoreWebView2WebResourceResponseReceivedEventHandler(e)
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
 	e.processFailed = newICoreWebView2ProcessFailedEventHandler(e)
@@ -319,9 +317,14 @@ func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, call
 	// Keep a reference to prevent garbage collection
 	cdpHandlerPoolMutex.Lock()
 	cdpHandlerPool = append(cdpHandlerPool, handler)
+
 	// Limit pool size to prevent memory leak
 	if len(cdpHandlerPool) > 10000 {
-		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-10000:]
+		// Keep only the newest half
+		half := len(cdpHandlerPool) / 2
+		tmp := make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, len(cdpHandlerPool)-half)
+		copy(tmp, cdpHandlerPool[half:])
+		cdpHandlerPool = tmp
 	}
 	cdpHandlerPoolMutex.Unlock()
 
@@ -351,9 +354,14 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 	// Keep a reference to prevent garbage collection
 	cdpHandlerPoolMutex.Lock()
 	cdpHandlerPool = append(cdpHandlerPool, handler)
+
 	// Limit pool size to prevent memory leak
 	if len(cdpHandlerPool) > 10000 {
-		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)-10000:]
+		// Keep only the newest half
+		half := len(cdpHandlerPool) / 2
+		tmp := make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, len(cdpHandlerPool)-half)
+		copy(tmp, cdpHandlerPool[half:])
+		cdpHandlerPool = tmp
 	}
 	cdpHandlerPoolMutex.Unlock()
 
@@ -371,6 +379,19 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 	}
 
 	return nil
+}
+
+func (e *Chromium) GetDevToolsProtocolEventReceiver(eventName string) (*ICoreWebView2DevToolsProtocolEventReceiver, error) {
+	if e.webview == nil {
+		return nil, errors.New("webview not initialized")
+	}
+
+	// Check WebView2 version
+	if e.webview2RuntimeVersion == "" {
+		return nil, errors.New("WebView2 runtime version not available")
+	}
+
+	return e.webview.GetDevToolsProtocolEventReceiver(eventName)
 }
 
 type ExecuteScriptCompletedHandler struct {
@@ -411,9 +432,13 @@ func (e *Chromium) Eval(script string, resultFunc ...func(errorCode uintptr, exe
 
 		executeScriptHandlerPoolMutex.Lock()
 		executeScriptHandlerPool = append(executeScriptHandlerPool, handler)
+
 		// Limit pool size to prevent memory leak
 		if len(executeScriptHandlerPool) > 10000 {
-			executeScriptHandlerPool = executeScriptHandlerPool[len(executeScriptHandlerPool)-10000:]
+			half := len(executeScriptHandlerPool) / 2
+			tmp := make([]*ICoreWebView2ExecuteScriptCompletedHandler, len(executeScriptHandlerPool)-half)
+			copy(tmp, executeScriptHandlerPool[half:])
+			executeScriptHandlerPool = tmp
 		}
 		executeScriptHandlerPoolMutex.Unlock()
 	}
@@ -558,10 +583,6 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 		e.errorCallback(err)
 	}
 	err = e.webview.AddWebResourceRequested(e.webResourceRequested, &token)
-	if err != nil {
-		e.errorCallback(err)
-	}
-	err = e.webview.AddWebResourceResponseReceived(e.webResourceResponseReceived, &token)
 	if err != nil {
 		e.errorCallback(err)
 	}

@@ -376,6 +376,25 @@ func (i *ICoreWebView2) CallDevToolsProtocolMethod(methodName string, parameters
 	return nil
 }
 
+func (i *ICoreWebView2) GetDevToolsProtocolEventReceiver(eventName string) (*ICoreWebView2DevToolsProtocolEventReceiver, error) {
+	// Convert string 'eventName' to *uint16
+	_eventName, err := UTF16PtrFromString(eventName)
+	if err != nil {
+		return nil, err
+	}
+	var receiver *ICoreWebView2DevToolsProtocolEventReceiver
+
+	hr, _, _ := i.vtbl.GetDevToolsProtocolEventReceiver.Call(
+		uintptr(unsafe.Pointer(i)),
+		uintptr(unsafe.Pointer(_eventName)),
+		uintptr(unsafe.Pointer(&receiver)),
+	)
+	if windows.Handle(hr) != windows.S_OK {
+		return nil, windows.Errno(hr)
+	}
+	return receiver, nil
+}
+
 func (i *ICoreWebView2) Navigate(url string) error {
 	u16url, err := windows.UTF16PtrFromString(url)
 	if err != nil {
