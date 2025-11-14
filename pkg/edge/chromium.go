@@ -255,9 +255,24 @@ func (e *Chromium) Resize() {
 }
 
 func (e *Chromium) Navigate(url string) {
-	err := e.webview.Navigate(url)
-	if err != nil {
-		e.errorCallback(err)
+	const errState = "The group or resource is not in the correct state to perform the requested operation."
+
+	maxRetries := 5
+	delay := 100 * time.Millisecond
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := e.webview.Navigate(url)
+		if err == nil {
+			return
+		}
+
+		if err.Error() != errState || attempt == maxRetries {
+			e.errorCallback(err)
+			return
+		}
+
+		time.Sleep(delay)
+		delay *= 2
 	}
 }
 
