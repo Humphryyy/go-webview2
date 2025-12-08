@@ -3,7 +3,6 @@
 package edge
 
 import (
-	"sync"
 	"syscall"
 	"unsafe"
 
@@ -98,8 +97,7 @@ func (h *WebResourceResponseViewGetContentCompletedHandler) WebResourceResponseV
 }
 
 // Keep a pool of handlers to prevent garbage collection
-var contentHandlerPool = make([]*ICoreWebView2WebResourceResponseViewGetContentCompletedHandler, 0, 10000)
-var contentHandlerPoolMutex sync.Mutex
+var contentHandlerPool = make([]*ICoreWebView2WebResourceResponseViewGetContentCompletedHandler, 0)
 
 func (i *ICoreWebView2WebResourceResponseView) GetContent(callback func(errorCode uintptr, result *IStream) uintptr) error {
 	handlerImpl := &WebResourceResponseViewGetContentCompletedHandler{}
@@ -108,17 +106,7 @@ func (i *ICoreWebView2WebResourceResponseView) GetContent(callback func(errorCod
 
 	handler := NewICoreWebView2WebResourceResponseViewGetContentCompletedHandler(handlerImpl)
 
-	contentHandlerPoolMutex.Lock()
 	contentHandlerPool = append(contentHandlerPool, handler)
-
-	if len(contentHandlerPool) > 10000 {
-		half := len(contentHandlerPool) / 2
-		tmp := make([]*ICoreWebView2WebResourceResponseViewGetContentCompletedHandler, len(contentHandlerPool)-half)
-		copy(tmp, contentHandlerPool[half:])
-		contentHandlerPool = tmp
-	}
-
-	contentHandlerPoolMutex.Unlock()
 
 	hr, _, _ := i.vtbl.GetContent.Call(
 		uintptr(unsafe.Pointer(i)),

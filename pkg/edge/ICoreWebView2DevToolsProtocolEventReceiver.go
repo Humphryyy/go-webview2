@@ -3,7 +3,6 @@
 package edge
 
 import (
-	"sync"
 	"syscall"
 	"unsafe"
 
@@ -45,23 +44,13 @@ func (d *DevToolsProtocolEventReceivedHandler) DevToolsProtocolEventReceived(sen
 	return d.resultFunc(sender, args)
 }
 
-var receiverPool = make([]*iCoreWebView2DevToolsProtocolEventReceivedEventHandler, 0, 10000)
-var receiverPoolMutex sync.Mutex
+var receiverPool = make([]*iCoreWebView2DevToolsProtocolEventReceivedEventHandler, 0)
 
 func (i *ICoreWebView2DevToolsProtocolEventReceiver) AddDevToolsProtocolEventReceived(handler func(sender *ICoreWebView2, args *ICoreWebView2DevToolsProtocolEventReceivedEventArgs) uintptr) (EventRegistrationToken, error) {
 	handlerImpl := &DevToolsProtocolEventReceivedHandler{resultFunc: handler}
 	eventHandler := NewICoreWebView2DevToolsProtocolEventReceivedEventHandler(handlerImpl)
 
-	receiverPoolMutex.Lock()
 	receiverPool = append(receiverPool, eventHandler)
-
-	if len(receiverPool) > 10000 {
-		half := len(receiverPool) / 2
-		tmp := make([]*iCoreWebView2DevToolsProtocolEventReceivedEventHandler, len(receiverPool)-half)
-		copy(tmp, receiverPool[half:])
-		receiverPool = tmp
-	}
-	receiverPoolMutex.Unlock()
 
 	var token EventRegistrationToken
 
