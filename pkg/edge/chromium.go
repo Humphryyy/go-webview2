@@ -283,7 +283,7 @@ func (e *Chromium) Resize() {
 }
 
 func (e *Chromium) Navigate(url string) {
-	const errState = "The group or resource is not in the correct state to perform the requested operation."
+	errStates := []string{"The group or resource is not in the correct state to perform the requested operation.", "This method can only be called from the thread that created the object."}
 
 	maxRetries := 5
 	delay := 100 * time.Millisecond
@@ -294,7 +294,15 @@ func (e *Chromium) Navigate(url string) {
 			return
 		}
 
-		if err.Error() != errState || attempt == maxRetries {
+		isKnown := false
+		for _, errState := range errStates {
+			if err.Error() == errState {
+				isKnown = true
+				break
+			}
+		}
+
+		if !isKnown || attempt == maxRetries {
 			e.errorCallback(err)
 			return
 		}
