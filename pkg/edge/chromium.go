@@ -353,7 +353,7 @@ func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, call
 
 	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{
 		resultFunc: callback,
-		refCount:   1, // Start with refcount of 1
+		refCount:   0, 
 		method:     method,
 	}
 
@@ -388,7 +388,7 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 
 	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{
 		resultFunc: callback,
-		refCount:   1, // Start with refcount of 1
+		refCount:   0, 
 		method:     method,
 	}
 
@@ -476,7 +476,7 @@ func (e *Chromium) Eval(script string, resultFunc ...func(errorCode uintptr, exe
 	if len(resultFunc) > 0 {
 		handlerImpl := &ExecuteScriptCompletedHandler{
 			resultFunc: resultFunc[0],
-			refCount:   1, // Start with refcount of 1
+			refCount:   0, 
 		}
 
 		handler = NewICoreWebView2ExecuteScriptCompletedHandler(handlerImpl)
@@ -545,7 +545,7 @@ func (e *Chromium) EvalWithResult(script string, resultFunc func(errorCode uintp
 
 	handlerImpl := &ExecuteScriptWithResultCompletedHandler{
 		resultFunc: resultFunc,
-		refCount:   1,
+		refCount:   0, 
 	}
 
 	handler := NewICoreWebView2ExecuteScriptWithResultCompletedHandler(handlerImpl)
