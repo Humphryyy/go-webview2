@@ -92,10 +92,6 @@ type Chromium struct {
 	ContainsFullScreenElementChangedCallback func(sender *ICoreWebView2, args *ICoreWebView2ContainsFullScreenElementChangedEventArgs)
 	AcceleratorKeyCallback                   func(uint) bool
 
-	// References
-	ReferencesLock    sync.Mutex
-	HandlerReferences map[string]any
-
 	// Error handling
 	globalErrorCallback func(error)
 
@@ -147,30 +143,6 @@ func NewChromium() *Chromium {
 	e.permissions = make(map[CoreWebView2PermissionKind]CoreWebView2PermissionState)
 	e.globalErrorCallback = globalErrorHandler
 	return e
-}
-
-func (e *Chromium) AddReference(ref any) {
-	e.ReferencesLock.Lock()
-	defer e.ReferencesLock.Unlock()
-
-	if e.HandlerReferences == nil {
-		e.HandlerReferences = make(map[string]any)
-	}
-
-	id := fmt.Sprintf("%p", ref)
-	e.HandlerReferences[id] = ref
-
-	go func() {
-		time.Sleep(1 * time.Minute)
-		e.RemoveReference(id)
-	}()
-}
-
-func (e *Chromium) RemoveReference(id string) {
-	e.ReferencesLock.Lock()
-	defer e.ReferencesLock.Unlock()
-
-	delete(e.HandlerReferences, id)
 }
 
 func (e *Chromium) ShuttingDown() {
@@ -326,8 +298,19 @@ func (e *Chromium) Init(script string) {
 	}
 }
 
+var (
+	cdpHandlerPool     = make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, 0)
+	scriptHandlerPool  = make([]*ICoreWebView2ExecuteScriptCompletedHandler, 0)
+	scriptResultPool   = make([]*ICoreWebView2ExecuteScriptWithResultCompletedHandler, 0)
+	handlerPoolMutex   sync.Mutex
+	maxHandlerPoolSize = 100000
+)
+
 type CallDevToolsProtocolMethodCompletedHandler struct {
 	resultFunc func(errorCode uintptr, result string) uintptr
+	refCount   int32
+	poolKey    uintptr
+	method     string
 }
 
 func (c *CallDevToolsProtocolMethodCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
@@ -335,11 +318,23 @@ func (c *CallDevToolsProtocolMethodCompletedHandler) QueryInterface(_, _ uintptr
 }
 
 func (c *CallDevToolsProtocolMethodCompletedHandler) AddRef() uintptr {
-	return 1
+	return uintptr(atomic.AddInt32(&c.refCount, 1))
 }
 
 func (c *CallDevToolsProtocolMethodCompletedHandler) Release() uintptr {
-	return 1
+	newCount := atomic.AddInt32(&c.refCount, -1)
+	if newCount == 0 && c.poolKey != 0 {
+		// Remove from pool when WebView2 releases it
+		handlerPoolMutex.Lock()
+		for i, h := range cdpHandlerPool {
+			if uintptr(unsafe.Pointer(h)) == c.poolKey {
+				cdpHandlerPool = append(cdpHandlerPool[:i], cdpHandlerPool[i+1:]...)
+				break
+			}
+		}
+		handlerPoolMutex.Unlock()
+	}
+	return uintptr(newCount)
 }
 
 func (c *CallDevToolsProtocolMethodCompletedHandler) CallDevToolsProtocolMethodCompleted(errorCode uintptr, result string) uintptr {
@@ -356,26 +351,22 @@ func (e *Chromium) CallDevToolsProtocolMethod(method string, params string, call
 		return errors.New("WebView2 runtime version not available")
 	}
 
-	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{}
-	handlerImpl.resultFunc = callback
+	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{
+		resultFunc: callback,
+		refCount:   1, // Start with refcount of 1
+		method:     method,
+	}
 
 	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+	handlerImpl.poolKey = uintptr(unsafe.Pointer(handler))
 
-	e.AddReference(handler)
-
-	/* // Keep a reference to prevent garbage collection
-	cdpHandlerPoolMutex.Lock()
+	// Keep a reference to prevent garbage collection
+	handlerPoolMutex.Lock()
 	cdpHandlerPool = append(cdpHandlerPool, handler)
-
-	// Limit pool size to prevent memory leak
-	if len(cdpHandlerPool) > 50 {
-		// Keep only the newest half
-		half := len(cdpHandlerPool) / 2
-		tmp := make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, len(cdpHandlerPool)-half)
-		copy(tmp, cdpHandlerPool[half:])
-		cdpHandlerPool = tmp
+	if len(cdpHandlerPool) > maxHandlerPoolSize {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)/2:]
 	}
-	cdpHandlerPoolMutex.Unlock() */
+	handlerPoolMutex.Unlock()
 
 	err := e.webview.CallDevToolsProtocolMethod(method, params, handler)
 	if err != nil {
@@ -395,26 +386,22 @@ func (e *Chromium) CallDevToolsProtocolMethodForSession(sessionId string, method
 		return errors.New("WebView2 runtime version not available")
 	}
 
-	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{}
-	handlerImpl.resultFunc = callback
+	handlerImpl := &CallDevToolsProtocolMethodCompletedHandler{
+		resultFunc: callback,
+		refCount:   1, // Start with refcount of 1
+		method:     method,
+	}
 
 	handler := NewICoreWebView2CallDevToolsProtocolMethodCompletedHandler(handlerImpl)
+	handlerImpl.poolKey = uintptr(unsafe.Pointer(handler))
 
-	e.AddReference(handler)
-
-	/* 	// Keep a reference to prevent garbage collection
-	   	cdpHandlerPoolMutex.Lock()
-	   	cdpHandlerPool = append(cdpHandlerPool, handler)
-
-	   	// Limit pool size to prevent memory leak
-	   	if len(cdpHandlerPool) > 50 {
-	   		// Keep only the newest half
-	   		half := len(cdpHandlerPool) / 2
-	   		tmp := make([]*ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, len(cdpHandlerPool)-half)
-	   		copy(tmp, cdpHandlerPool[half:])
-	   		cdpHandlerPool = tmp
-	   	}
-	   	cdpHandlerPoolMutex.Unlock() */
+	// Keep a reference to prevent garbage collection
+	handlerPoolMutex.Lock()
+	cdpHandlerPool = append(cdpHandlerPool, handler)
+	if len(cdpHandlerPool) > maxHandlerPoolSize {
+		cdpHandlerPool = cdpHandlerPool[len(cdpHandlerPool)/2:]
+	}
+	handlerPoolMutex.Unlock()
 
 	// Get ICoreWebView2_11 interface
 	webview2 := e.webview.GetICoreWebView2_11()
@@ -447,6 +434,8 @@ func (e *Chromium) GetDevToolsProtocolEventReceiver(eventName string) (*ICoreWeb
 
 type ExecuteScriptCompletedHandler struct {
 	resultFunc func(errorCode uintptr, executedScript string) uintptr
+	refCount   int32
+	poolKey    uintptr
 }
 
 func (e *ExecuteScriptCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
@@ -454,11 +443,23 @@ func (e *ExecuteScriptCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
 }
 
 func (e *ExecuteScriptCompletedHandler) AddRef() uintptr {
-	return 1
+	return uintptr(atomic.AddInt32(&e.refCount, 1))
 }
 
 func (e *ExecuteScriptCompletedHandler) Release() uintptr {
-	return 1
+	newCount := atomic.AddInt32(&e.refCount, -1)
+	if newCount == 0 && e.poolKey != 0 {
+		// Remove from pool when WebView2 releases it
+		handlerPoolMutex.Lock()
+		for i, h := range scriptHandlerPool {
+			if uintptr(unsafe.Pointer(h)) == e.poolKey {
+				scriptHandlerPool = append(scriptHandlerPool[:i], scriptHandlerPool[i+1:]...)
+				break
+			}
+		}
+		handlerPoolMutex.Unlock()
+	}
+	return uintptr(newCount)
 }
 
 func (e *ExecuteScriptCompletedHandler) ExecuteScriptCompleted(errorCode uintptr, executedScript string) uintptr {
@@ -473,24 +474,21 @@ func (e *Chromium) Eval(script string, resultFunc ...func(errorCode uintptr, exe
 	var handler *ICoreWebView2ExecuteScriptCompletedHandler
 
 	if len(resultFunc) > 0 {
-		handlerImpl := &ExecuteScriptCompletedHandler{}
-		handlerImpl.resultFunc = resultFunc[0]
+		handlerImpl := &ExecuteScriptCompletedHandler{
+			resultFunc: resultFunc[0],
+			refCount:   1, // Start with refcount of 1
+		}
 
 		handler = NewICoreWebView2ExecuteScriptCompletedHandler(handlerImpl)
+		handlerImpl.poolKey = uintptr(unsafe.Pointer(handler))
 
-		e.AddReference(handler)
-
-		/* executeScriptHandlerPoolMutex.Lock()
-		executeScriptHandlerPool = append(executeScriptHandlerPool, handler)
-
-		// Limit pool size to prevent memory leak
-		if len(executeScriptHandlerPool) > 50 {
-			half := len(executeScriptHandlerPool) / 2
-			tmp := make([]*ICoreWebView2ExecuteScriptCompletedHandler, len(executeScriptHandlerPool)-half)
-			copy(tmp, executeScriptHandlerPool[half:])
-			executeScriptHandlerPool = tmp
+		// Keep a reference to prevent garbage collection
+		handlerPoolMutex.Lock()
+		scriptHandlerPool = append(scriptHandlerPool, handler)
+		if len(scriptHandlerPool) > maxHandlerPoolSize {
+			scriptHandlerPool = scriptHandlerPool[len(scriptHandlerPool)/2:]
 		}
-		executeScriptHandlerPoolMutex.Unlock() */
+		handlerPoolMutex.Unlock()
 	}
 
 	err := e.webview.ExecuteScript(script, handler)
@@ -503,6 +501,8 @@ func (e *Chromium) Eval(script string, resultFunc ...func(errorCode uintptr, exe
 
 type ExecuteScriptWithResultCompletedHandler struct {
 	resultFunc func(errorCode uintptr, result *ICoreWebView2ExecuteScriptResult) uintptr
+	refCount   int32
+	poolKey    uintptr
 }
 
 func (e *ExecuteScriptWithResultCompletedHandler) QueryInterface(_, _ uintptr) uintptr {
@@ -510,11 +510,23 @@ func (e *ExecuteScriptWithResultCompletedHandler) QueryInterface(_, _ uintptr) u
 }
 
 func (e *ExecuteScriptWithResultCompletedHandler) AddRef() uintptr {
-	return 1
+	return uintptr(atomic.AddInt32(&e.refCount, 1))
 }
 
 func (e *ExecuteScriptWithResultCompletedHandler) Release() uintptr {
-	return 1
+	newCount := atomic.AddInt32(&e.refCount, -1)
+	if newCount == 0 && e.poolKey != 0 {
+		// Remove from pool when WebView2 releases it
+		handlerPoolMutex.Lock()
+		for i, h := range scriptResultPool {
+			if uintptr(unsafe.Pointer(h)) == e.poolKey {
+				scriptResultPool = append(scriptResultPool[:i], scriptResultPool[i+1:]...)
+				break
+			}
+		}
+		handlerPoolMutex.Unlock()
+	}
+	return uintptr(newCount)
 }
 
 func (e *ExecuteScriptWithResultCompletedHandler) ExecuteScriptWithResultCompleted(errorCode uintptr, result *ICoreWebView2ExecuteScriptResult) uintptr {
@@ -531,11 +543,21 @@ func (e *Chromium) EvalWithResult(script string, resultFunc func(errorCode uintp
 		return errors.New("WebView2 runtime version not available")
 	}
 
-	handlerImpl := &ExecuteScriptWithResultCompletedHandler{}
-
-	handlerImpl.resultFunc = resultFunc
+	handlerImpl := &ExecuteScriptWithResultCompletedHandler{
+		resultFunc: resultFunc,
+		refCount:   1,
+	}
 
 	handler := NewICoreWebView2ExecuteScriptWithResultCompletedHandler(handlerImpl)
+	handlerImpl.poolKey = uintptr(unsafe.Pointer(handler))
+
+	// Keep a reference to prevent garbage collection
+	handlerPoolMutex.Lock()
+	scriptResultPool = append(scriptResultPool, handler)
+	if len(scriptResultPool) > maxHandlerPoolSize {
+		scriptResultPool = scriptResultPool[len(scriptResultPool)/2:]
+	}
+	handlerPoolMutex.Unlock()
 
 	// Get ICoreWebView2_21 interface
 	webview2 := e.webview.GetICoreWebView2_21()

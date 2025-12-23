@@ -5,7 +5,7 @@ import (
 )
 
 type ICoreWebView2ExecuteScriptCompletedHandlerVtbl struct {
-	_IUnknownVtbl
+	IUnknownVtbl
 	Invoke ComProc
 }
 
@@ -45,12 +45,12 @@ func _ICoreWebView2ExecuteScriptCompletedHandlerInvoke(this *ICoreWebView2Execut
 }
 
 type ICoreWebView2ExecuteScriptCompletedHandlerImpl interface {
-	_IUnknownImpl
+	IUnknownImpl
 	ExecuteScriptCompleted(errorCode uintptr, executedScript string) uintptr
 }
 
 var _ICoreWebView2ExecuteScriptCompletedHandlerFn = ICoreWebView2ExecuteScriptCompletedHandlerVtbl{
-	_IUnknownVtbl{
+	IUnknownVtbl{
 		NewComProc(_ICoreWebView2ExecuteScriptCompletedHandlerIUnknownQueryInterface),
 		NewComProc(_ICoreWebView2ExecuteScriptCompletedHandlerIUnknownAddRef),
 		NewComProc(_ICoreWebView2ExecuteScriptCompletedHandlerIUnknownRelease),
